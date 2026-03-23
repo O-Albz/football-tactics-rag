@@ -7,15 +7,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-      
+
       - name: Run tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          RAG_API_KEY: ${{ secrets.RAG_API_KEY }}
         run: python -m pytest tests/ -v

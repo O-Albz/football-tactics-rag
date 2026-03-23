@@ -4,15 +4,16 @@ from qdrant_client import QdrantClient
 import os
 
 load_dotenv()
-    
+
 COLLECTION_NAME = "football_tactics"
 import os
 QDRANT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "qdrant_db")
 
 def get_retriever():
-    # Qdrant embedded mode uses an on-disk directory; in this repo the actual
-    # storage lives under `data/qdrant_db/qdrant_db/`.
-    return QdrantClient(path=QDRANT_PATH)
+    if os.getenv("QDRANT_URL") and os.getenv("QDRANT_API_KEY"):
+        return QdrantClient(url=os.getenv("QDRANT_URL"), api_key=os.getenv("QDRANT_API_KEY"))
+    else:
+        return QdrantClient(path=QDRANT_PATH)
 
 def retrieve(query: str, top_k: int = 5) -> list[dict]:
     client = get_retriever()

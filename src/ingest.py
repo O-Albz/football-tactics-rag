@@ -115,7 +115,10 @@ def fetch_wikipedia_articles(output_dir: str = "./data/documents"):
 
 def get_qdrant_client():
     # Keep ingestion/retrieval consistent with the embedded on-disk layout.
-    return QdrantClient(path=QDRANT_PATH)
+    if os.getenv("QDRANT_URL") and os.getenv("QDRANT_API_KEY"):
+        return QdrantClient(url=os.getenv("QDRANT_URL"), api_key=os.getenv("QDRANT_API_KEY"))
+    else:
+        return QdrantClient(path=QDRANT_PATH)
 
 def setup_collection(client: QdrantClient):
     existing = [c.name for c in client.get_collections().collections]
