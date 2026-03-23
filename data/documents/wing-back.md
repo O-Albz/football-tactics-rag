@@ -1,0 +1,7 @@
+# Wingback
+
+The word wingback has several senses:
+
+Wing chair, a type of high-backed chair
+Wingback (American football), is one of several varieties of running backs in the wing T formation
+Wing-back (association football), a defensive position
