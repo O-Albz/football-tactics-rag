@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from src.app import app
 import json
 from pathlib import Path
+import time
 
 client = TestClient(app)
 
@@ -88,3 +89,42 @@ def test_stats_endpoint_returns_data():
     data = response.json()
     assert "total_queries" in data
     assert data["total_queries"] >= 0
+    
+    
+def test_non_football_question_returns_400():
+    response = client.post(
+        "/answer",
+        json={"question": "What is the capital of France?"},
+        headers={"X-API-Key": VALID_KEY}
+    )
+    assert response.status_code == 400
+    assert "football tactics" in response.json()["detail"].lower()
+
+def test_non_football_question_recipe_returns_400():
+    response = client.post(
+        "/answer",
+        json={"question": "How do I make pasta carbonara?"},
+        headers={"X-API-Key": VALID_KEY}
+    )
+    assert response.status_code == 400
+
+def test_cached_response_is_faster():
+    question = "What is the offside trap?"
+
+    start1 = time.time()
+    client.post("/answer", json={"question": question}, headers={"X-API-Key": VALID_KEY})
+    first_latency = time.time() - start1
+
+    start2 = time.time()
+    client.post("/answer", json={"question": question}, headers={"X-API-Key": VALID_KEY})
+    second_latency = time.time() - start2
+
+    assert second_latency < first_latency
+
+def test_cached_response_same_answer():
+    question = "What is zonal marking?"
+
+    r1 = client.post("/answer", json={"question": question}, headers={"X-API-Key": VALID_KEY})
+    r2 = client.post("/answer", json={"question": question}, headers={"X-API-Key": VALID_KEY})
+
+    assert r1.json()["answer"] == r2.json()["answer"]

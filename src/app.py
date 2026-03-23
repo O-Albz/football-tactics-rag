@@ -11,6 +11,8 @@ import time
 import json
 from src.generator import generate
 from src.logger import log_query
+from src.cache import get_cached, set_cached
+from src.validator import is_football_tactics_question
 
 
 load_dotenv()
@@ -47,9 +49,42 @@ def health():
 @limiter.limit("60/minute")
 def answer(request: Request, body: QuestionRequest, api_key: str = Depends(verify_api_key)):
     start = time.time()
+
+    # Validate question is football tactics related
+    if not is_football_tactics_question(body.question):
+        raise HTTPException(
+            status_code=400,
+            detail="This service only answers questions about football tactics, formations, and managers."
+        )
+
+    # Check cache
+    cached = get_cached(body.question, body.top_k)
+    if cached:
+        latency_ms = (time.time() - start) * 1000
+        log_query(
+            question=body.question,
+            answer=cached["answer"],
+            sources=cached["sources"],
+            latency_ms=latency_ms,
+            chunks_used=cached["chunks_used"],
+            success=True
+        )
+        return AnswerResponse(
+            **cached,
+            latency_ms=round(latency_ms, 2)
+        )
+
     try:
         result = generate(body.question, top_k=body.top_k)
         latency_ms = (time.time() - start) * 1000
+
+        # Store in cache
+        set_cached(body.question, body.top_k, {
+            "question": result["question"],
+            "answer": result["answer"],
+            "sources": list(dict.fromkeys(result["sources"])),
+            "chunks_used": result["chunks_used"]
+        })
 
         log_query(
             question=body.question,
@@ -68,8 +103,6 @@ def answer(request: Request, body: QuestionRequest, api_key: str = Depends(verif
             latency_ms=round(latency_ms, 2)
         )
 
-    except RateLimitExceeded:
-        raise
     except Exception as e:
         latency_ms = (time.time() - start) * 1000
         log_query(
@@ -82,7 +115,8 @@ def answer(request: Request, body: QuestionRequest, api_key: str = Depends(verif
             error=str(e)
         )
         raise HTTPException(status_code=500, detail=str(e))
-
+    
+    
 @app.get("/stats")
 def stats():
     log_path = Path("logs/queries.jsonl")
