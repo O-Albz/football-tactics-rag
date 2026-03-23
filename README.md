@@ -1,5 +1,16 @@
 # Football Tactics RAG
 
+## Live Demo
+
+-------------------------------------------------------
+
+API available at: `https://football-tactics-rag.onrender.com`
+Interactive docs: `https://football-tactics-rag.onrender.com/docs`
+
+Authentication required — include header: `X-API-Key: tactics-rag-secret-key-123`
+
+-------------------------------------------------------
+
 A retrieval-augmented generation (RAG) system for querying football tactics, formations, and manager philosophies. Ask questions in natural language and get answers grounded in real tactical documents.
 
 ## Architecture
