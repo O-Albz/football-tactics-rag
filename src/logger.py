@@ -2,7 +2,7 @@ import json
 import time
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 LOG_PATH = Path("logs/queries.jsonl")
 
@@ -27,7 +27,7 @@ def log_query(
     error: str = None
 ):
     entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "question": question,
         "answer_length": len(answer) if answer else 0,
         "sources": sources,

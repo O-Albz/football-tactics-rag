@@ -1,21 +1,34 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from src.auth import verify_api_key
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from collections import Counter
+from pathlib import Path
 import time
+import json
 from src.generator import generate
 from src.logger import log_query
 
+
 load_dotenv()
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Football Tactics RAG",
     description="Ask about football tactics and get answers based on a RAG system.",
     version="1.0.0"
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 class QuestionRequest(BaseModel):
     question: str
     top_k: int = 5
+
 
 class AnswerResponse(BaseModel):
     question: str
@@ -24,19 +37,22 @@ class AnswerResponse(BaseModel):
     chunks_used: int
     latency_ms: float
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
 @app.post("/answer", response_model=AnswerResponse)
-def answer(request: QuestionRequest):
+@limiter.limit("60/minute")
+def answer(request: Request, body: QuestionRequest, api_key: str = Depends(verify_api_key)):
     start = time.time()
     try:
-        result = generate(request.question, top_k=request.top_k)
+        result = generate(body.question, top_k=body.top_k)
         latency_ms = (time.time() - start) * 1000
 
         log_query(
-            question=request.question,
+            question=body.question,
             answer=result["answer"],
             sources=result["sources"],
             latency_ms=latency_ms,
@@ -52,10 +68,12 @@ def answer(request: QuestionRequest):
             latency_ms=round(latency_ms, 2)
         )
 
+    except RateLimitExceeded:
+        raise
     except Exception as e:
         latency_ms = (time.time() - start) * 1000
         log_query(
-            question=request.question,
+            question=body.question,
             answer=None,
             sources=[],
             latency_ms=latency_ms,
@@ -64,3 +82,42 @@ def answer(request: QuestionRequest):
             error=str(e)
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/stats")
+def stats():
+    log_path = Path("logs/queries.jsonl")
+    if not log_path.exists():
+        return {"total_queries": 0}
+
+    entries = []
+    with open(log_path) as f:
+        for line in f:
+            try:
+                entries.append(json.loads(line))
+            except Exception:
+                continue
+
+    if not entries:
+        return {"total_queries": 0}
+
+    successful = [e for e in entries if e["success"]]
+    failed = [e for e in entries if not e["success"]]
+    latencies = [e["latency_ms"] for e in successful]
+
+    return {
+        "total_queries": len(entries),
+        "successful_queries": len(successful),
+        "failed_queries": len(failed),
+        "avg_latency_ms": round(sum(latencies) / len(latencies), 2) if latencies else 0,
+        "max_latency_ms": round(max(latencies), 2) if latencies else 0,
+        "min_latency_ms": round(min(latencies), 2) if latencies else 0,
+        "most_common_sources": _top_sources(successful)
+    }
+
+
+def _top_sources(entries: list) -> list:
+    all_sources = [s for e in entries for s in e["sources"]]
+    return [
+        {"source": s, "count": c}
+        for s, c in Counter(all_sources).most_common(5)
+    ]
